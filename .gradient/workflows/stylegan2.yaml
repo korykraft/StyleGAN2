@@ -64,106 +64,6 @@ jobs:
     with:
       url: https://github.com/NVlabs/stylegan2.git
 
-  # 2. Get pretrained cat model
-
-  # The model .pkl is large so is not in the main StyleGAN2 repo
-  # We copy the .pkl in this step, then refer to the copy via getPretrainedModel.outputs.pretrainedNetwork
-  # below to avoid copying it again in the next steps
-
-  getPretrainedModel:
-    resources:
-      instance-type: C4
-    outputs:
-      pretrainedNetwork:
-        type: dataset
-        with:
-          ref: stylegan2-wsp-pretrained-network
-    uses: container@v1
-    with:
-      args:
-        - wget
-        - https://nvlabs-fi-cdn.nvidia.com/stylegan2/networks/stylegan2-cat-config-f.pkl
-        - -P
-        - /outputs/pretrainedNetwork
-      image: alpine:latest
-
-  # 3. Run evaluation on pretrained cat model
-
-  # The input extracted images dataset reference refers to the latest version from Workflow 1
-  # A particular version of the input extracted images can also be specified, via <dataset ID>:<dataset version>
-  # (Also available are no version (latest), v1 (etc.), :latest, or :<dataset-tag>)
-
-  # Comment the first "ref:" line and uncomment the second one under "inputs:" below if you ran Workflow 1 yourself and
-  # want to use its output rather than gradient/stylegan2-workflows-sample-project-extr-img, which is the public dataset
-
-  evaluatePretrainedModel:
-    resources:
-      instance-type: P4000 # P6000 or V100 will run this step faster if available, but cost more
-    needs:
-      - cloneStyleGAN2Repo
-      - getPretrainedModel
-    inputs:
-      repo: cloneStyleGAN2Repo.outputs.repo
-      extractedImagesForTraining:
-        type: dataset
-        with:
-          ref: gradient/stylegan2-workflows-sample-project-extr-img
-          #ref: stylegan2-wsp-extr-img
-      pretrainedNetwork: getPretrainedModel.outputs.pretrainedNetwork
-    outputs:
-      evaluationPretrained:
-        type: dataset
-        with:
-          ref: stylegan2-wsp-evaluation-pretrained
-    uses: script@v1
-    with:
-      script: |-
-        pip install scipy==1.3.3
-        pip install requests==2.22.0
-        pip install Pillow==6.2.1
-        cp -R /inputs/repo /stylegan2
-        cp -R /inputs/extractedImagesForTraining/cat_images_tfrecords /stylegan2
-        cd /stylegan2
-        python run_metrics.py \
-          --data-dir=/stylegan2/cat_images_tfrecords \
-          --network=/inputs/pretrainedNetwork/stylegan2-cat-config-f.pkl \
-          --metrics=fid50k,ppl2_wend \
-          --dataset=cat \
-          --result-dir=/outputs/evaluationPretrained
-        ls "-aFlR" /outputs
-      image: tensorflow/tensorflow:1.14.0-gpu-py3
-
-  # 4. Show generating images using pretrained cat model
-
-  generateImagesPretrainedModel:
-    resources:
-      instance-type: P4000
-    needs:
-      - cloneStyleGAN2Repo
-      - getPretrainedModel
-    inputs:
-      repo: cloneStyleGAN2Repo.outputs.repo
-      pretrainedNetwork: getPretrainedModel.outputs.pretrainedNetwork
-    outputs:
-      generatedCatsPretrained:
-        type: dataset
-        with:
-          ref: stylegan2-wsp-generated-cats-pretrained
-    uses: script@v1
-    with:
-      script: |-
-        pip install scipy==1.3.3
-        pip install requests==2.22.0
-        pip install Pillow==6.2.1
-        cp -R /inputs/repo /stylegan2
-        cd /stylegan2
-        python run_generator.py generate-images \
-          --network=/inputs/pretrainedNetwork/stylegan2-cat-config-f.pkl \
-          --seeds=6601-6606 \
-          --truncation-psi=0.5 \
-          --result-dir=/outputs/generatedCatsPretrained
-        ls "-aFlR" /outputs
-      image: tensorflow/tensorflow:1.14.0-gpu-py3
 
   # 5. Train our model on image subsample
 
@@ -207,51 +107,51 @@ jobs:
         ls "-aFlR" /outputs
       image: tensorflow/tensorflow:1.14.0-gpu-py3
 
-  # 6. Run evaluation on our trained model
+  # # 6. Run evaluation on our trained model
 
-  # Note here we are evaluating on the same images as used for training
-  # Since our model was only trained on a small subset it doesn't matter here
+  # # Note here we are evaluating on the same images as used for training
+  # # Since our model was only trained on a small subset it doesn't matter here
 
-  # Comment the first "ref:" line and uncomment the second one under "inputs:" below if you ran Workflow 1 yourself and
-  # want to use its output rather than gradient/stylegan2-workflows-sample-project-extr-img, which is the public dataset
+  # # Comment the first "ref:" line and uncomment the second one under "inputs:" below if you ran Workflow 1 yourself and
+  # # want to use its output rather than gradient/stylegan2-workflows-sample-project-extr-img, which is the public dataset
 
-  evaluateOurModel:
-    resources:
-      instance-type: P4000 # Or P6000, V100
-    needs:
-      - cloneStyleGAN2Repo
-      - trainOurModel
-    inputs:
-      repo: cloneStyleGAN2Repo.outputs.repo
-      extractedImagesForTraining:
-        type: dataset
-        with:
-          ref: gradient/stylegan2-workflows-sample-project-extr-img
-          #ref: stylegan2-wsp-extr-img
-      ourTrainedNetwork: trainOurModel.outputs.ourTrainedNetwork
-    outputs:
-      evaluationOurs:
-        type: dataset
-        with:
-          ref: stylegan2-wsp-evaluation-ours
-    uses: script@v1
-    with:
-      script: |-
-        pip install scipy==1.3.3
-        pip install requests==2.22.0
-        pip install Pillow==6.2.1
-        cp -R /inputs/repo /stylegan2
-        cp -R /inputs/extractedImagesForTraining/cat_images_tfrecords /stylegan2
-        cp    /inputs/ourTrainedNetwork/00000-stylegan2-cat-1gpu-config-f/network-final.pkl /stylegan2
-        cd /stylegan2
-        python run_metrics.py \
-          --data-dir=/stylegan2/cat_images_tfrecords \
-          --network=/stylegan2/network-final.pkl \
-          --metrics=fid50k,ppl2_wend \
-          --dataset=cat \
-          --result-dir=/outputs/evaluationOurs
-        ls "-aFlR" /outputs
-      image: tensorflow/tensorflow:1.14.0-gpu-py3
+  # evaluateOurModel:
+  #   resources:
+  #     instance-type: P4000 # Or P6000, V100
+  #   needs:
+  #     - cloneStyleGAN2Repo
+  #     - trainOurModel
+  #   inputs:
+  #     repo: cloneStyleGAN2Repo.outputs.repo
+  #     extractedImagesForTraining:
+  #       type: dataset
+  #       with:
+  #         ref: gradient/stylegan2-workflows-sample-project-extr-img
+  #         #ref: stylegan2-wsp-extr-img
+  #     ourTrainedNetwork: trainOurModel.outputs.ourTrainedNetwork
+  #   outputs:
+  #     evaluationOurs:
+  #       type: dataset
+  #       with:
+  #         ref: stylegan2-wsp-evaluation-ours
+  #   uses: script@v1
+  #   with:
+  #     script: |-
+  #       pip install scipy==1.3.3
+  #       pip install requests==2.22.0
+  #       pip install Pillow==6.2.1
+  #       cp -R /inputs/repo /stylegan2
+  #       cp -R /inputs/extractedImagesForTraining/cat_images_tfrecords /stylegan2
+  #       cp    /inputs/ourTrainedNetwork/00000-stylegan2-cat-1gpu-config-f/network-final.pkl /stylegan2
+  #       cd /stylegan2
+  #       python run_metrics.py \
+  #         --data-dir=/stylegan2/cat_images_tfrecords \
+  #         --network=/stylegan2/network-final.pkl \
+  #         --metrics=fid50k,ppl2_wend \
+  #         --dataset=cat \
+  #         --result-dir=/outputs/evaluationOurs
+  #       ls "-aFlR" /outputs
+  #     image: tensorflow/tensorflow:1.14.0-gpu-py3
 
   # 7. Show generating images with our trained model
 
